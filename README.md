@@ -71,3 +71,18 @@ Code Quality and Structure:
 Well-commented, modular code.
 Clear separation of concerns (UI, core logic, caching, handlers).
 Adherence to Python best practices and Blender addon development guidelines.
+
+## Usage
+
+1. Copy the `bmesh_bend` folder to your Blender addons directory or install it as a zip.
+2. Enable "BMesh Bend" in the Add-ons preferences.
+3. Select a mesh object, enable *Active* in the panel, and pick a target curve.
+4. Adjust the deformation axis, animation factor, and strength to bend the mesh along the curve.
+
+## Features
+
+- Real-time bending of mesh objects along curves using BMesh operations
+- Orientation frames computed along the curve to reduce twisting
+- Supports positive and negative deformation axes
+- Simple caching system with buttons to force re-setup and clear cached data
+
