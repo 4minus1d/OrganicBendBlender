@@ -56,7 +56,6 @@ def sample_curve(curve_obj, resolution=64):
     """Sample points, tangents and orientation frames from the curve."""
     depsgraph = bpy.context.evaluated_depsgraph_get()
     eval_obj = curve_obj.evaluated_get(depsgraph)
-    curve = eval_obj.to_curve()
     curve = eval_obj.to_curve(depsgraph)
 
     points = []
@@ -64,10 +63,30 @@ def sample_curve(curve_obj, resolution=64):
     for spline in curve.splines:
         if len(spline.bezier_points) + len(spline.points) < 2:
             continue
+        use_eval = hasattr(spline, "evaluate") and hasattr(spline, "evaluate_derivative")
+        # Fallback coordinates for simple interpolation when evaluate API is missing
+        coords = None
+        if not use_eval:
+            if len(spline.bezier_points):
+                coords = [bp.co.to_3d() for bp in spline.bezier_points]
+            else:
+                coords = [Vector((p.co.x, p.co.y, p.co.z)) / (p.co.w if p.co.w else 1.0) for p in spline.points]
         for i in range(resolution + 1):
             u = i / resolution
-            co = eval_obj.matrix_world @ spline.evaluate(u)
-            tan = eval_obj.matrix_world.to_3x3() @ spline.evaluate_derivative(u)
+            if use_eval:
+                co = eval_obj.matrix_world @ spline.evaluate(u)
+                tan = eval_obj.matrix_world.to_3x3() @ spline.evaluate_derivative(u)
+            else:
+                seg = u * (len(coords) - 1)
+                idx = int(seg)
+                frac = seg - idx
+                if idx >= len(coords) - 1:
+                    idx = len(coords) - 2
+                    frac = 1.0
+                p0 = coords[idx]
+                p1 = coords[idx + 1]
+                co = eval_obj.matrix_world @ p0.lerp(p1, frac)
+                tan = eval_obj.matrix_world.to_3x3() @ (p1 - p0)
             points.append(co)
             tangents.append(tan.normalized())
 
