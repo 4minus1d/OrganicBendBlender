@@ -104,12 +104,15 @@ def sample_curve(curve_obj, resolution=64):
             tangents.append(tan.normalized())
 
     frames = []
+    lengths = []
     if not points:
-        return [], []
+        return [], [], []
     up = Vector((0, 0, 1))
     normal = (up - up.dot(tangents[0]) * tangents[0]).normalized()
     prev = tangents[0]
-    for t in tangents:
+    total_len = 0.0
+    lengths.append(total_len)
+    for i, t in enumerate(tangents):
         binormal = t.cross(normal).normalized()
         frames.append((t.normalized(), normal.normalized(), binormal))
         axis = prev.cross(t)
@@ -118,7 +121,10 @@ def sample_curve(curve_obj, resolution=64):
             rot = Matrix.Rotation(angle, 3, axis.normalized())
             normal = (rot @ normal).normalized()
         prev = t
-    return points, frames
+        if i > 0:
+            total_len += (points[i] - points[i-1]).length
+            lengths.append(total_len)
+    return points, frames, lengths
 
 # -----------------------------------------------------------------------------
 # Deformation
@@ -138,7 +144,7 @@ def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0
     bbox_max = max(co[axis_idx] for co in orig_coords)
     bbox_len = max(bbox_max - bbox_min, 1e-6)
 
-    points, frames = sample_curve(curve_obj, resolution=128)
+    points, frames, lengths = sample_curve(curve_obj, resolution=128)
     if not points:
         bm.free()
         return
@@ -148,14 +154,20 @@ def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0
         return mat.to_quaternion()
 
     quats = [frame_to_quat(f) for f in frames]
+    curve_len = lengths[-1] if lengths else 0.0
+    start_pos = anim_factor * max(curve_len - bbox_len, 0.0)
 
     for v, orig in zip(bm.verts, orig_coords):
-        u = (orig[axis_idx] - bbox_min) / bbox_len - anim_factor
-        u = max(0.0, min(1.0, u))
-        pos = u * (len(points) - 1)
-        i0 = int(pos)
-        i1 = min(i0 + 1, len(points) - 1)
-        frac = pos - i0
+        s = start_pos + (orig[axis_idx] - bbox_min)
+        s = max(0.0, min(curve_len, s))
+        i1 = 0
+        while i1 < len(lengths) and lengths[i1] < s:
+            i1 += 1
+        if i1 >= len(lengths):
+            i1 = len(lengths) - 1
+        i0 = max(i1 - 1, 0)
+        seg_len = lengths[i1] - lengths[i0]
+        frac = 0.0 if seg_len == 0.0 else (s - lengths[i0]) / seg_len
         point = points[i0].lerp(points[i1], frac)
         quat = quats[i0].slerp(quats[i1], frac)
         mat = quat.to_matrix()
@@ -241,7 +253,7 @@ class BMBEND_PT_panel(bpy.types.Panel):
         layout.prop(obj, 'bmesh_bend_active')
         layout.prop(obj, 'bmesh_bend_curve_target')
         layout.prop(obj, 'bmesh_bend_deform_axis')
-        layout.prop(obj, 'bmesh_bend_animation_factor')
+        layout.prop(obj, 'bmesh_bend_animation_factor', slider=True)
         layout.prop(obj, 'bmesh_bend_strength')
         layout.operator('object.bmbend_setup')
         layout.operator('object.bmbend_clear_cache')
@@ -262,6 +274,11 @@ def depsgraph_update(scene, depsgraph):
             obj = update.id
             if getattr(obj, 'bmesh_bend_active', False):
                 update_bend(obj)
+
+def frame_change(_scene):
+    for obj in bpy.data.objects:
+        if getattr(obj, 'bmesh_bend_active', False):
+            update_bend(obj)
 
 def register_props():
     bpy.types.Object.bmesh_bend_active = BoolProperty(
@@ -285,6 +302,9 @@ def register_props():
     bpy.types.Object.bmesh_bend_animation_factor = FloatProperty(
         name="Animation Factor",
         default=0.0,
+        min=0.0,
+        max=1.0,
+        subtype='FACTOR',
         update=update_bend,
     )
     bpy.types.Object.bmesh_bend_strength = FloatProperty(
@@ -307,6 +327,7 @@ def register():
         bpy.utils.register_class(cls)
     register_props()
     bpy.app.handlers.depsgraph_update_post.append(depsgraph_update)
+    bpy.app.handlers.frame_change_post.append(frame_change)
 
 def unregister():
     unregister_props()
@@ -314,6 +335,8 @@ def unregister():
         bpy.utils.unregister_class(cls)
     if depsgraph_update in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update)
+    if frame_change in bpy.app.handlers.frame_change_post:
+        bpy.app.handlers.frame_change_post.remove(frame_change)
 
 if __name__ == "__main__":
     register()
