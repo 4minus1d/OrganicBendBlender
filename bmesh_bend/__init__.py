@@ -2,7 +2,13 @@
 import bpy
 import bmesh
 from mathutils import Vector, Matrix
-from bpy.props import BoolProperty, FloatProperty, EnumProperty, PointerProperty
+from bpy.props import (
+    BoolProperty,
+    FloatProperty,
+    EnumProperty,
+    IntProperty,
+    PointerProperty,
+)
 
 bl_info = {
     "name": "BMesh Bend",
@@ -49,6 +55,7 @@ def cache_original_coords(obj):
     cache = ensure_cache(obj)
     if 'orig_coords' not in cache:
         cache['orig_coords'] = [v.co.copy() for v in obj.data.vertices]
+        cache['cached_matrix'] = obj.matrix_world.copy()
 
 
 def restore_original_coords(obj):
@@ -135,6 +142,7 @@ def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0
     cache_original_coords(obj)
     cache = ensure_cache(obj)
     orig_coords = cache['orig_coords']
+    cached_matrix = cache.get('cached_matrix', obj.matrix_world)
 
     bm = bmesh.new()
     bm.from_mesh(obj.data)
@@ -144,7 +152,7 @@ def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0
     bbox_max = max(co[axis_idx] for co in orig_coords)
     bbox_len = max(bbox_max - bbox_min, 1e-6)
 
-    points, frames, lengths = sample_curve(curve_obj, resolution=128)
+    points, frames, lengths = sample_curve(curve_obj, resolution=obj.bmesh_bend_resolution)
     if not points:
         bm.free()
         return
@@ -175,7 +183,7 @@ def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0
             mat[0] *= -1
         offset = orig.copy()
         offset[axis_idx] = 0.0
-        world_offset = obj.matrix_world.to_3x3() @ offset
+        world_offset = cached_matrix.to_3x3() @ offset
         new_world = point + mat @ world_offset * strength
         v.co = obj.matrix_world.inverted() @ new_world
 
@@ -236,6 +244,21 @@ class BMBEND_OT_clear_cache(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class BMBEND_OT_insert_keyframe(bpy.types.Operator):
+    """Insert a keyframe for the Animation Factor"""
+    bl_idname = "object.bmbend_insert_keyframe"
+    bl_label = "Keyframe Animation Factor"
+
+    @classmethod
+    def poll(cls, context):
+        return context.object and context.object.type == 'MESH'
+
+    def execute(self, context):
+        obj = context.object
+        obj.keyframe_insert(data_path="bmesh_bend_animation_factor")
+        return {'FINISHED'}
+
+
 class BMBEND_PT_panel(bpy.types.Panel):
     bl_label = "BMesh Bend"
     bl_idname = "OBJECT_PT_bmesh_bend"
@@ -253,7 +276,10 @@ class BMBEND_PT_panel(bpy.types.Panel):
         layout.prop(obj, 'bmesh_bend_active')
         layout.prop(obj, 'bmesh_bend_curve_target')
         layout.prop(obj, 'bmesh_bend_deform_axis')
-        layout.prop(obj, 'bmesh_bend_animation_factor', slider=True)
+        row = layout.row(align=True)
+        row.prop(obj, 'bmesh_bend_animation_factor', slider=True)
+        row.operator('object.bmbend_insert_keyframe', text='', icon='KEY_HLT')
+        layout.prop(obj, 'bmesh_bend_resolution')
         layout.prop(obj, 'bmesh_bend_strength')
         layout.operator('object.bmbend_setup')
         layout.operator('object.bmbend_clear_cache')
@@ -261,6 +287,7 @@ class BMBEND_PT_panel(bpy.types.Panel):
 classes = (
     BMBEND_OT_setup,
     BMBEND_OT_clear_cache,
+    BMBEND_OT_insert_keyframe,
     BMBEND_PT_panel,
 )
 
@@ -269,11 +296,15 @@ classes = (
 # -----------------------------------------------------------------------------
 
 def depsgraph_update(scene, depsgraph):
+    processed = set()
     for update in depsgraph.updates:
         if isinstance(update.id, bpy.types.Object):
             obj = update.id
             if getattr(obj, 'bmesh_bend_active', False):
-                update_bend(obj)
+                key = _cache_key(obj)
+                if key not in processed:
+                    update_bend(obj)
+                    processed.add(key)
 
 def frame_change(_scene):
     for obj in bpy.data.objects:
@@ -307,6 +338,13 @@ def register_props():
         subtype='FACTOR',
         update=update_bend,
     )
+    bpy.types.Object.bmesh_bend_resolution = IntProperty(
+        name="Resolution",
+        default=128,
+        min=8,
+        max=512,
+        update=update_bend,
+    )
     bpy.types.Object.bmesh_bend_strength = FloatProperty(
         name="Strength",
         default=1.0,
@@ -320,6 +358,7 @@ def unregister_props():
     del bpy.types.Object.bmesh_bend_curve_target
     del bpy.types.Object.bmesh_bend_deform_axis
     del bpy.types.Object.bmesh_bend_animation_factor
+    del bpy.types.Object.bmesh_bend_resolution
     del bpy.types.Object.bmesh_bend_strength
 
 def register():
