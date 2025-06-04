@@ -114,13 +114,15 @@ def sample_curve(curve_obj, resolution=64):
 def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0):
     """Deform *obj* along *curve_obj* using cached coordinates."""
     cache_original_coords(obj)
+    cache = ensure_cache(obj)
+    orig_coords = cache['orig_coords']
+
     bm = bmesh.new()
     bm.from_mesh(obj.data)
 
     axis_idx, axis_sign = AXIS_MAP[deform_axis]
-    verts = [v.co.copy() for v in bm.verts]
-    bbox_min = min(v[axis_idx] for v in verts)
-    bbox_max = max(v[axis_idx] for v in verts)
+    bbox_min = min(co[axis_idx] for co in orig_coords)
+    bbox_max = max(co[axis_idx] for co in orig_coords)
     bbox_len = max(bbox_max - bbox_min, 1e-6)
 
     points, frames = sample_curve(curve_obj, resolution=128)
@@ -134,7 +136,7 @@ def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0
 
     quats = [frame_to_quat(f) for f in frames]
 
-    for v, orig in zip(bm.verts, verts):
+    for v, orig in zip(bm.verts, orig_coords):
         u = (orig[axis_idx] - bbox_min) / bbox_len - anim_factor
         u = max(0.0, min(1.0, u))
         pos = u * (len(points) - 1)
@@ -148,8 +150,9 @@ def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0
             mat[0] *= -1
         offset = orig.copy()
         offset[axis_idx] = 0.0
-        new_co = point + mat @ offset * strength
-        v.co = obj.matrix_world.inverted() @ new_co
+        world_offset = obj.matrix_world.to_3x3() @ offset
+        new_world = point + mat @ world_offset * strength
+        v.co = obj.matrix_world.inverted() @ new_world
 
     bm.to_mesh(obj.data)
     bm.free()
