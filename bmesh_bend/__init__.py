@@ -327,6 +327,9 @@ def register_props():
     messages, remove any existing definitions before creating the new ones.
     """
 
+    # Always remove any previous definitions first to ensure a clean state.
+    unregister_props()
+
     props = [
         "bmesh_bend_active",
         "bmesh_bend_curve_target",
