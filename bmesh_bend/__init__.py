@@ -27,9 +27,10 @@ AXIS_MAP = {
 # -----------------------------------------------------------------------------
 
 def ensure_cache(obj):
-    if 'bmesh_bend_cache' not in obj:
-        obj['bmesh_bend_cache'] = {}
-    return obj['bmesh_bend_cache']
+    """Return a runtime cache dictionary stored on *obj*."""
+    if not hasattr(obj, "_bmesh_bend_cache"):
+        obj._bmesh_bend_cache = {}
+    return obj._bmesh_bend_cache
 
 
 def cache_original_coords(obj):
@@ -188,8 +189,8 @@ class BMBEND_OT_setup(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.object
-        if 'bmesh_bend_cache' in obj:
-            del obj['bmesh_bend_cache']
+        if hasattr(obj, "_bmesh_bend_cache"):
+            del obj._bmesh_bend_cache
         update_bend(obj)
         return {'FINISHED'}
 
@@ -204,8 +205,8 @@ class BMBEND_OT_clear_cache(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.object
-        if 'bmesh_bend_cache' in obj:
-            del obj['bmesh_bend_cache']
+        if hasattr(obj, "_bmesh_bend_cache"):
+            del obj._bmesh_bend_cache
         return {'FINISHED'}
 
 
