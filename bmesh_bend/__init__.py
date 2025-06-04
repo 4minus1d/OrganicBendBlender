@@ -320,6 +320,25 @@ def frame_change(_scene):
             update_bend(obj, depsgraph=depsgraph)
 
 def register_props():
+    """Register custom properties on ``bpy.types.Object``.
+
+    Blender may keep property definitions from a previously loaded version of
+    the addon.  To avoid "registration error: property ... already registered"
+    messages, remove any existing definitions before creating the new ones.
+    """
+
+    props = [
+        "bmesh_bend_active",
+        "bmesh_bend_curve_target",
+        "bmesh_bend_deform_axis",
+        "bmesh_bend_animation_factor",
+        "bmesh_bend_resolution",
+        "bmesh_bend_strength",
+    ]
+    for attr in props:
+        if hasattr(bpy.types.Object, attr):
+            delattr(bpy.types.Object, attr)
+
     bpy.types.Object.bmesh_bend_active = BoolProperty(
         name="Active",
         default=False,
@@ -362,12 +381,17 @@ def register_props():
     )
 
 def unregister_props():
-    del bpy.types.Object.bmesh_bend_active
-    del bpy.types.Object.bmesh_bend_curve_target
-    del bpy.types.Object.bmesh_bend_deform_axis
-    del bpy.types.Object.bmesh_bend_animation_factor
-    del bpy.types.Object.bmesh_bend_resolution
-    del bpy.types.Object.bmesh_bend_strength
+    props = [
+        "bmesh_bend_active",
+        "bmesh_bend_curve_target",
+        "bmesh_bend_deform_axis",
+        "bmesh_bend_animation_factor",
+        "bmesh_bend_resolution",
+        "bmesh_bend_strength",
+    ]
+    for attr in props:
+        if hasattr(bpy.types.Object, attr):
+            delattr(bpy.types.Object, attr)
 
 def register():
     for cls in classes:
