@@ -56,7 +56,7 @@ def sample_curve(curve_obj, resolution=64):
     """Sample points, tangents and orientation frames from the curve."""
     depsgraph = bpy.context.evaluated_depsgraph_get()
     eval_obj = curve_obj.evaluated_get(depsgraph)
-    curve = eval_obj.to_curve()
+    curve = eval_obj.to_curve(depsgraph)
 
     points = []
     tangents = []
