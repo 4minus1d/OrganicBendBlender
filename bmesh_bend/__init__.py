@@ -26,11 +26,16 @@ AXIS_MAP = {
 # Cache helpers
 # -----------------------------------------------------------------------------
 
+from weakref import WeakKeyDictionary
+
+_RUNTIME_CACHE = WeakKeyDictionary()
+
+
 def ensure_cache(obj):
-    """Return a runtime cache dictionary stored on *obj*."""
-    if not hasattr(obj, "_bmesh_bend_cache"):
-        obj._bmesh_bend_cache = {}
-    return obj._bmesh_bend_cache
+    """Return a runtime cache dictionary associated with *obj*."""
+    if obj not in _RUNTIME_CACHE:
+        _RUNTIME_CACHE[obj] = {}
+    return _RUNTIME_CACHE[obj]
 
 
 def cache_original_coords(obj):
@@ -189,8 +194,8 @@ class BMBEND_OT_setup(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.object
-        if hasattr(obj, "_bmesh_bend_cache"):
-            del obj._bmesh_bend_cache
+        if obj in _RUNTIME_CACHE:
+            del _RUNTIME_CACHE[obj]
         update_bend(obj)
         return {'FINISHED'}
 
@@ -205,8 +210,8 @@ class BMBEND_OT_clear_cache(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.object
-        if hasattr(obj, "_bmesh_bend_cache"):
-            del obj._bmesh_bend_cache
+        if obj in _RUNTIME_CACHE:
+            del _RUNTIME_CACHE[obj]
         return {'FINISHED'}
 
 
