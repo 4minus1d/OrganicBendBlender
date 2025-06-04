@@ -72,9 +72,8 @@ def restore_original_coords(obj):
 # Curve sampling and frames
 # -----------------------------------------------------------------------------
 
-def sample_curve(curve_obj, resolution=64):
+def sample_curve(curve_obj, depsgraph, resolution=64):
     """Sample points, tangents and orientation frames from the curve."""
-    depsgraph = bpy.context.evaluated_depsgraph_get()
     eval_obj = curve_obj.evaluated_get(depsgraph)
     curve = eval_obj.to_curve(depsgraph)
 
@@ -137,7 +136,7 @@ def sample_curve(curve_obj, resolution=64):
 # Deformation
 # -----------------------------------------------------------------------------
 
-def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0):
+def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0, depsgraph=None):
     """Deform *obj* along *curve_obj* using cached coordinates."""
     cache_original_coords(obj)
     cache = ensure_cache(obj)
@@ -152,7 +151,9 @@ def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0
     bbox_max = max(co[axis_idx] for co in orig_coords)
     bbox_len = max(bbox_max - bbox_min, 1e-6)
 
-    points, frames, lengths = sample_curve(curve_obj, resolution=obj.bmesh_bend_resolution)
+    if depsgraph is None:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+    points, frames, lengths = sample_curve(curve_obj, depsgraph, resolution=obj.bmesh_bend_resolution)
     if not points:
         bm.free()
         return
@@ -194,16 +195,22 @@ def deform_object(obj, curve_obj, deform_axis='X', anim_factor=0.0, strength=1.0
 # Update logic
 # -----------------------------------------------------------------------------
 
-def update_bend(obj, _context=None):
+def update_bend(obj, context=None, depsgraph=None):
     if not obj.bmesh_bend_active or not obj.bmesh_bend_curve_target:
         restore_original_coords(obj)
         return
+    if depsgraph is None:
+        if context is not None:
+            depsgraph = context.evaluated_depsgraph_get()
+        else:
+            depsgraph = bpy.context.evaluated_depsgraph_get()
     deform_object(
         obj,
         obj.bmesh_bend_curve_target,
         obj.bmesh_bend_deform_axis,
         obj.bmesh_bend_animation_factor,
         obj.bmesh_bend_strength,
+        depsgraph=depsgraph,
     )
 
 # -----------------------------------------------------------------------------
@@ -224,7 +231,7 @@ class BMBEND_OT_setup(bpy.types.Operator):
         key = _cache_key(obj)
         if key in _RUNTIME_CACHE:
             del _RUNTIME_CACHE[key]
-        update_bend(obj)
+        update_bend(obj, context)
         return {'FINISHED'}
 
 
@@ -303,13 +310,14 @@ def depsgraph_update(scene, depsgraph):
             if getattr(obj, 'bmesh_bend_active', False):
                 key = _cache_key(obj)
                 if key not in processed:
-                    update_bend(obj)
+                    update_bend(obj, depsgraph)
                     processed.add(key)
 
 def frame_change(_scene):
+    depsgraph = bpy.context.evaluated_depsgraph_get()
     for obj in bpy.data.objects:
         if getattr(obj, 'bmesh_bend_active', False):
-            update_bend(obj)
+            update_bend(obj, depsgraph=depsgraph)
 
 def register_props():
     bpy.types.Object.bmesh_bend_active = BoolProperty(
