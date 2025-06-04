@@ -26,16 +26,23 @@ AXIS_MAP = {
 # Cache helpers
 # -----------------------------------------------------------------------------
 
-from weakref import WeakKeyDictionary
+# Blender objects do not support weak references, so we store caches in a
+# regular dictionary keyed by the object's memory pointer. Entries are removed
+# via operators when a reset is requested.
+_RUNTIME_CACHE = {}
 
-_RUNTIME_CACHE = WeakKeyDictionary()
+
+def _cache_key(obj):
+    """Return a dictionary key for *obj* that remains stable for its lifetime."""
+    return obj.as_pointer()
 
 
 def ensure_cache(obj):
     """Return a runtime cache dictionary associated with *obj*."""
-    if obj not in _RUNTIME_CACHE:
-        _RUNTIME_CACHE[obj] = {}
-    return _RUNTIME_CACHE[obj]
+    key = _cache_key(obj)
+    if key not in _RUNTIME_CACHE:
+        _RUNTIME_CACHE[key] = {}
+    return _RUNTIME_CACHE[key]
 
 
 def cache_original_coords(obj):
@@ -194,8 +201,9 @@ class BMBEND_OT_setup(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.object
-        if obj in _RUNTIME_CACHE:
-            del _RUNTIME_CACHE[obj]
+        key = _cache_key(obj)
+        if key in _RUNTIME_CACHE:
+            del _RUNTIME_CACHE[key]
         update_bend(obj)
         return {'FINISHED'}
 
@@ -210,8 +218,9 @@ class BMBEND_OT_clear_cache(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.object
-        if obj in _RUNTIME_CACHE:
-            del _RUNTIME_CACHE[obj]
+        key = _cache_key(obj)
+        if key in _RUNTIME_CACHE:
+            del _RUNTIME_CACHE[key]
         return {'FINISHED'}
 
 
