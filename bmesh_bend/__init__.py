@@ -330,7 +330,10 @@ def register_props():
     # Always remove any previous definitions first to ensure a clean state.
     unregister_props()
 
-    # Remove leftover ID properties that could prevent registration
+    # Remove leftover ID properties that could prevent registration.  When
+    # the addon is enabled, ``bpy.data`` may be a restricted proxy that does
+    # not expose ``objects``.  If so, defer the cleanup using a timer so it
+    # runs once registration is complete and unrestricted access is restored.
     props = [
         "bmesh_bend_active",
         "bmesh_bend_curve_target",
@@ -339,13 +342,22 @@ def register_props():
         "bmesh_bend_resolution",
         "bmesh_bend_strength",
     ]
-    for obj in bpy.data.objects:
-        for attr in props:
-            if attr in obj.keys():
-                try:
-                    del obj[attr]
-                except Exception:
-                    pass
+
+    def _cleanup_idprops():
+        if hasattr(bpy.data, "objects"):
+            for obj in bpy.data.objects:
+                for attr in props:
+                    if attr in obj.keys():
+                        try:
+                            del obj[attr]
+                        except Exception:
+                            pass
+        return None
+
+    if hasattr(bpy.data, "objects"):
+        _cleanup_idprops()
+    else:
+        bpy.app.timers.register(_cleanup_idprops, first_interval=0.1)
 
     for attr in props:
         if hasattr(bpy.types.Object, attr):
