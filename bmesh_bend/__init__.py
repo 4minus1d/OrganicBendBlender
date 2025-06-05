@@ -330,6 +330,7 @@ def register_props():
     # Always remove any previous definitions first to ensure a clean state.
     unregister_props()
 
+    # Remove leftover ID properties that could prevent registration
     props = [
         "bmesh_bend_active",
         "bmesh_bend_curve_target",
@@ -338,6 +339,14 @@ def register_props():
         "bmesh_bend_resolution",
         "bmesh_bend_strength",
     ]
+    for obj in bpy.data.objects:
+        for attr in props:
+            if attr in obj.keys():
+                try:
+                    del obj[attr]
+                except Exception:
+                    pass
+
     for attr in props:
         if hasattr(bpy.types.Object, attr):
             delattr(bpy.types.Object, attr)
